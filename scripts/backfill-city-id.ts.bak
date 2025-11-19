@@ -1,0 +1,18 @@
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const cities = await prisma.city.findMany({ where: { cityId: null }, select: { code: true } });
+  for (const c of cities) {
+    const uuid = (globalThis.crypto?.randomUUID?.() || require('crypto').randomUUID());
+    await prisma.city.update({ where: { code: c.code }, data: { cityId: uuid } });
+  }
+  console.log(`Backfilled city_id for ${cities.length} cities.`);
+}
+
+main().then(() => prisma.$disconnect()).catch(async (e) => {
+  console.error(e);
+  await prisma.$disconnect();
+  process.exit(1);
+});

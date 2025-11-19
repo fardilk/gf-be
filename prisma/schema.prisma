@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User table mapped to legacy/explicit column names
+model User {
+  id            String    @id @default(uuid()) @map("user_id") @db.Uuid
+  email         String    @unique @map("user_nm")
+  passwordHash  String    @map("pass_hash")
+  isAdmin       Boolean   @default(false) @map("is_admin")
+  personId      String?   @unique @map("person_id") @db.Uuid
+  statusCode    Int       @default(1) @map("status_code") // 0=inactive,1=active
+  createdAt     DateTime  @default(now()) @map("created_dttm")
+  createdUserId String    @default("administrator") @map("created_user_id")
+  updatedAt     DateTime? @map("updated_dttm")
+  updatedUserId String?   @map("updated_user_id")
+
+  // relations
+  person        Person?        @relation(fields: [personId], references: [personId])
+  refreshTokens RefreshToken[]
+  picks         Pick[]
+
+  @@map("user")
+}
+
+model Person {
+  personId              String              @id @default(uuid()) @map("person_id") @db.Uuid
+  address               String?             @map("address")
+  personName            String?             @map("person_name")
+  firstName             String?             @map("first_name")
+  lastName              String?             @map("last_name")
+  salutation            String?             @map("salutation")
+  genderId              String?             @map("gender_id") @db.Uuid
+  birthDttm             DateTime?           @map("birth_dttm") @db.Date
+  cityId                String?             @map("city_id") @db.Uuid
+  jobId                 String?             @map("job_id") @db.Uuid
+  ethnicityId           String?             @map("ethnicity_id") @db.Uuid
+  maritalStatusId       String?             @map("marital_status_id")
+  isFree                Boolean             @default(false) @map("is_free")
+  organizationLevelId   String?             @map("organization_level_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_dttm")
+  createdUserId         String              @default("administrator") @map("created_user_id")
+  updatedAt             DateTime?           @map("updated_dttm")
+  updatedUserId         String?             @map("updated_user_id")
+
+  // relations
+  gender                Gender?             @relation(fields: [genderId], references: [genderId])
+  city                  City?               @relation(fields: [cityId], references: [cityId])
+  job                   Job?                @relation(fields: [jobId], references: [jobId])
+  ethnicity             Ethnicity?          @relation(fields: [ethnicityId], references: [ethnicityId])
+  maritalStatus         MaritalStatus?      @relation(fields: [maritalStatusId], references: [maritalStatusId])
+  organizationLevel     OrganizationLevel?  @relation(fields: [organizationLevelId], references: [organizationLevelId])
+
+  users                   User[]
+  personAccesses          PersonAccess[]
+  upcomingEvents          UpcomingEvent[]
+  trxRelationsAsGifter    TrxRelation[]   @relation("TrxRelationGifter")
+  trxRelationsAsReceiver  TrxRelation[]   @relation("TrxRelationReceiver")
+
+  @@map("person")
+}
+
+model Gender {
+  genderId String   @id @default(uuid()) @map("gender_id") @db.Uuid
+  name     String
+
+  persons  Person[]
+
+  @@map("gender")
+}
+
+model City {
+  cityId  String   @id @default(uuid()) @map("city_id") @db.Uuid
+  name    String
+
+  persons Person[]
+
+  @@map("city")
+}
+
+model Ethnicity {
+  ethnicityId String   @id @default(uuid()) @map("ethnicity_id") @db.Uuid
+  name        String
+
+  persons     Person[]
+
+  @@map("ethnicity")
+}
+
+model MaritalStatus {
+  maritalStatusId String   @id @map("marital_status_id")
+  name            String
+
+  persons         Person[]
+
+  @@map("marital_status")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @map("token_hash") // hash of the refresh token (never store raw token)
+  createdAt DateTime  @default(now()) @map("created_dttm")
+  expiresAt DateTime  @map("expires_dttm")
+  revokedAt DateTime? @map("revoked_dttm")
+
+  @@index([userId])
+  @@map("refresh_token")
+}
+
+// Access control table
+model Access {
+  id   String @id @map("access_id")
+  name String @map("access_name")
+  json Json?  @map("access_json")
+
+  // relations
+  personAccesses PersonAccess[]
+
+  @@map("access")
+}
+
+// Pivot table person_access (many-to-many Person <-> Access)
+model PersonAccess {
+  id       String @id @default(uuid()) @map("person_access_id") @db.Uuid
+  personId String @map("person_id") @db.Uuid
+  accessId String @map("access_id")
+
+  // relations
+  person Person @relation(fields: [personId], references: [personId], onDelete: Cascade)
+  access Access @relation(fields: [accessId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([accessId])
+  @@map("person_access")
+}
+
+model Job {
+  jobId   String   @id @default(uuid()) @map("job_id") @db.Uuid
+  name    String
+
+  persons Person[]
+
+  @@map("job")
+}
+
+// JobOther table removed - use Job with name='Other' instead
+
+model OrganizationLevel {
+  organizationLevelId   String   @id @default(uuid()) @map("organization_level_id") @db.Uuid
+  organizationLevelName String   @map("organization_level_name")
+
+  persons               Person[]
+
+  @@map("organization_level")
+}
+
+model MasterRelation {
+  relationId   String  @id @default(uuid()) @map("relation_id") @db.Uuid
+  relationName String  @map("relation_name")
+  description  String?
+
+  trxRelations   TrxRelation[]
+  upcomingEvents UpcomingEvent[]
+
+  @@map("master_relation")
+}
+
+model TrxRelation {
+  trxRelationId  String  @id @default(uuid()) @map("trx_relation_id") @db.Uuid
+  relationId     String  @map("relation_id") @db.Uuid
+  personGifter   String? @map("person_gifter") @db.Uuid
+  personReceiver String? @map("person_receiver") @db.Uuid
+
+  relation       MasterRelation @relation(fields: [relationId], references: [relationId], onDelete: Cascade)
+  gifter         Person?        @relation("TrxRelationGifter", fields: [personGifter], references: [personId])
+  receiver       Person?        @relation("TrxRelationReceiver", fields: [personReceiver], references: [personId])
+
+  @@index([relationId])
+  @@index([personGifter])
+  @@index([personReceiver])
+  @@map("trx_relation")
+}
+
+model Pick {
+  pickId      String   @id @default(uuid()) @map("pick_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  imageUrl    String?  @map("image_url")
+  description String?
+  cost        String?
+  url         String
+  savedAt     DateTime @default(now()) @map("saved_at")
+  createdAt   DateTime @default(now()) @map("created_dttm")
+  updatedAt   DateTime @updatedAt @map("updated_dttm")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("pick")
+}
+
+model UpcomingEvent {
+  upcomingEventId    String         @id @default(uuid()) @map("upcoming_event_id") @db.Uuid
+  personId           String         @map("person_id") @db.Uuid
+  upcomingEventTitle String         @map("upcoming_event_title")
+  relationId         String         @map("relation_id") @db.Uuid
+  eventDate          DateTime       @map("event_date") @db.Date
+
+  person             Person         @relation(fields: [personId], references: [personId], onDelete: Cascade)
+  relation           MasterRelation @relation(fields: [relationId], references: [relationId])
+
+  @@index([personId])
+  @@index([relationId])
+  @@map("upcoming_event")
+}
