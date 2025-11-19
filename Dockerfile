@@ -17,7 +17,8 @@ RUN pnpm install --frozen-lockfile
 # copy seluruh source code
 COPY . .
 
-# generate prisma client
+# generate prisma client (with dummy DATABASE_URL)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN pnpm prisma generate
 
 # build nest ke folder dist
