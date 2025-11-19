@@ -30,7 +30,8 @@ jobs:
       - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./gf-api
+          file: ./gf-api/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/gf-be-dev:latest
