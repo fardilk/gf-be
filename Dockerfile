@@ -4,17 +4,24 @@ FROM node:22-alpine AS builder
 # kerja di dalam /app
 WORKDIR /app
 
+# Install pnpm
+RUN npm install -g pnpm
+
 # copy file dependency dulu
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
+COPY prisma ./prisma/
 
 # install semua dependency (dev + prod)
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # copy seluruh source code
 COPY . .
 
+# generate prisma client
+RUN pnpm prisma generate
+
 # build nest ke folder dist
-RUN npm run build
+RUN pnpm run build
 
 # ---- Runtime stage ----
 FROM node:22-alpine AS runner
@@ -22,8 +29,12 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Install pnpm
+RUN npm install -g pnpm
+
 # copy package.json (buat info/metadata)
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
+COPY prisma ./prisma/
 
 # copy node_modules dan dist dari builder
 COPY --from=builder /app/node_modules ./node_modules
