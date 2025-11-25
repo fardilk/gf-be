@@ -3,25 +3,28 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm + NestJS CLI
+# Install tools needed for NestJS + Prisma during build
+RUN apk add --no-cache python3 make g++ bash
+
+# Install pnpm + nest CLI
 RUN npm install -g pnpm @nestjs/cli
 
-# copy deps
+# Copy dependencies
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 
-# install deps
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# copy full source
+# Copy the rest of the source
 COPY . .
 
-# generate prisma
+# Generate prisma client
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN pnpm prisma generate
 
-# build nest
-RUN pnpm run build
+# Build NestJS using local binary
+RUN pnpm exec nest build
 
 
 # ---- Runtime stage ----
@@ -35,6 +38,7 @@ RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 
+# Copy build output & node_modules
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
