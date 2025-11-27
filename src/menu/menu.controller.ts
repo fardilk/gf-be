@@ -1,50 +1,108 @@
-import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
-import { PrismaService } from '../database/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
-
-// Menu item shape returned to FE
-type MenuItem = any; // structure comes from DB (access_json)
+import { MenuService } from './menu.service';
+import { CreateMenuDto } from './dto/create-menu.dto';
+import { UpdateMenuDto } from './dto/update-menu.dto';
+import { CreateAccessDto } from './dto/create-access.dto';
+import { UpdateAccessDto } from './dto/update-access.dto';
+import { AssignMenusToAccessDto } from './dto/assign-menus.dto';
+import { MenuKey } from '../common/decorators/menu-key.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('menu')
 export class MenuController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private menuService: MenuService) {}
 
-  // No internal menu JSON; menus are stored in DB (access.access_json)
+  // ========== GET EFFECTIVE MENU FOR LOGGED-IN USER ==========
 
   @Get()
-  async getMenu(
-    @Req() req: Request & { user: { userId: string; email: string } },
-  ): Promise<MenuItem[]> {
-    const userId = req.user.userId;
+  async getMyMenu(@Req() req: Request & { user: { userId: string } }) {
+    return this.menuService.getEffectiveMenusForUser(req.user.userId);
+  }
 
-    // Find user's access via person -> person_access -> access
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        person: {
-          select: {
-            personAccesses: { select: { accessId: true } },
-          },
-        },
-      },
-    });
+  // ========== MENU MANAGEMENT ENDPOINTS ==========
+  @MenuKey('organizations')
+  @Get('all')
+  async getAllMenus() {
+    return this.menuService.getAllMenus();
+  }
 
-    // Default to ac02 (limited) if no access configured
-    const codes = new Set(
-      user?.person?.personAccesses.map((pa) => pa.accessId) ?? [],
-    );
-    const chosen = codes.has('ac03')
-      ? 'ac03'
-      : codes.has('ac01')
-        ? 'ac01'
-        : codes.has('ac02')
-          ? 'ac02'
-          : 'ac02';
-    const access = await this.prisma.access.findUnique({
-      where: { id: chosen },
-    });
-    return (access?.json as unknown as MenuItem[]) ?? [];
+  @MenuKey('organizations')
+  @Get('items/:id')
+  async getMenuById(@Param('id') id: string) {
+    return this.menuService.getMenuById(id);
+  }
+
+  @MenuKey('organizations')
+  @Post('items')
+  async createMenu(@Body() dto: CreateMenuDto) {
+    return this.menuService.createMenu(dto);
+  }
+
+  @MenuKey('organizations')
+  @Patch('items/:id')
+  async updateMenu(@Param('id') id: string, @Body() dto: UpdateMenuDto) {
+    return this.menuService.updateMenu(id, dto);
+  }
+
+  @MenuKey('organizations')
+  @Delete('items/:id')
+  async deleteMenu(@Param('id') id: string) {
+    return this.menuService.deleteMenu(id);
+  }
+
+  // ========== ACCESS MANAGEMENT ENDPOINTS ==========
+  @MenuKey('organizations')
+  @Get('access')
+  async getAllAccesses() {
+    return this.menuService.getAllAccesses();
+  }
+
+  @MenuKey('organizations')
+  @Get('access/:id')
+  async getAccessById(@Param('id') id: string) {
+    return this.menuService.getAccessById(id);
+  }
+
+  @MenuKey('organizations')
+  @Post('access')
+  async createAccess(@Body() dto: CreateAccessDto) {
+    return this.menuService.createAccess(dto);
+  }
+
+  @MenuKey('organizations')
+  @Patch('access/:id')
+  async updateAccess(@Param('id') id: string, @Body() dto: UpdateAccessDto) {
+    return this.menuService.updateAccess(id, dto);
+  }
+
+  @MenuKey('organizations')
+  @Delete('access/:id')
+  async deleteAccess(@Param('id') id: string) {
+    return this.menuService.deleteAccess(id);
+  }
+
+  // ========== MENU-ACCESS ASSIGNMENT ==========
+  @MenuKey('organizations')
+  @Post('access/assign-menus')
+  async assignMenusToAccess(@Body() dto: AssignMenusToAccessDto) {
+    return this.menuService.assignMenusToAccess(dto.accessId, dto.menuIds);
+  }
+
+  @MenuKey('organizations')
+  @Get('access/:id/menus')
+  async getMenusForAccess(@Param('id') accessId: string) {
+    return this.menuService.getMenusForAccess(accessId);
   }
 }

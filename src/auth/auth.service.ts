@@ -6,6 +6,7 @@ import {
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
+import { OrganizationsService } from '../organizations/organizations.service';
 import * as argon2 from 'argon2';
 import { add } from 'date-fns';
 
@@ -17,6 +18,7 @@ export class AuthService {
     private users: UsersService,
     private jwt: JwtService,
     private prisma: PrismaService,
+    private organizationsService: OrganizationsService,
   ) {}
 
   async register(email: string, password: string, name?: string) {
@@ -85,7 +87,44 @@ export class AuthService {
   }
 
   async me(userId: string) {
-    return this.users.findByIdPublic(userId);
+    const user = await this.users.findByIdPublic(userId);
+    
+    // Get user's personId from the user record
+    const userRecord = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { personId: true },
+    });
+
+    let organizations: Array<{
+      organizationId: string;
+      name: string;
+      code: string;
+      description: string | null;
+      logoUrl: string | null;
+      role: string;
+      status: string;
+      isActive: boolean;
+    }> = [];
+    let requiresOrganizationSetup = false;
+
+    if (userRecord?.personId) {
+      // Get organizations for this person
+      organizations = await this.organizationsService.getMyOrganizations(
+        userRecord.personId,
+      );
+      
+      // Check if organization setup is required
+      const setupCheck = await this.organizationsService.checkOrganizationSetup(
+        userRecord.personId,
+      );
+      requiresOrganizationSetup = setupCheck.requiresOrganizationSetup;
+    }
+
+    return {
+      user,
+      organizations,
+      requiresOrganizationSetup,
+    };
   }
 
   async refresh(userId: string, presentedToken: string) {

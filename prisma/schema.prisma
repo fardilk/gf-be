@@ -59,8 +59,10 @@ model Person {
   users                   User[]
   personAccesses          PersonAccess[]
   upcomingEvents          UpcomingEvent[]
-  trxRelationsAsGifter    TrxRelation[]   @relation("TrxRelationGifter")
-  trxRelationsAsReceiver  TrxRelation[]   @relation("TrxRelationReceiver")
+  trxRelationsAsGifter    TrxRelation[]          @relation("TrxRelationGifter")
+  trxRelationsAsReceiver  TrxRelation[]          @relation("TrxRelationReceiver")
+  organizationsCreated    Organization[]
+  organizationMemberships OrganizationMember[]
 
   @@map("person")
 }
@@ -114,28 +116,77 @@ model RefreshToken {
   @@map("refresh_token")
 }
 
-// Access control table
+// Access control table (roles/profiles)
 model Access {
-  id   String @id @map("access_id")
-  name String @map("access_name")
-  json Json?  @map("access_json")
+  id          String    @id @map("access_id")
+  name        String    @map("access_name")
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   // relations
   personAccesses PersonAccess[]
+  accessMenus    AccessMenu[]
 
   @@map("access")
 }
 
+// Menu items table
+model Menu {
+  id        String    @id @default(uuid()) @db.Uuid
+  key       String    @unique
+  parentId  String?   @map("parent_id") @db.Uuid
+  url       String
+  icon      String?
+  title     String
+  order     Int       @default(0)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // relations
+  parent       Menu?        @relation("MenuHierarchy", fields: [parentId], references: [id])
+  children     Menu[]       @relation("MenuHierarchy")
+  accessMenus  AccessMenu[]
+
+  @@index([parentId])
+  @@index([order])
+  @@map("menus")
+}
+
+// Pivot table: which menus each access can see
+model AccessMenu {
+  id        String    @id @default(uuid()) @map("access_menu_id") @db.Uuid
+  accessId  String    @map("access_id")
+  menuId    String    @map("menu_id") @db.Uuid
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // relations
+  access Access @relation(fields: [accessId], references: [id], onDelete: Cascade)
+  menu   Menu   @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  @@unique([accessId, menuId])
+  @@index([accessId])
+  @@index([menuId])
+  @@map("access_menus")
+}
+
 // Pivot table person_access (many-to-many Person <-> Access)
 model PersonAccess {
-  id       String @id @default(uuid()) @map("person_access_id") @db.Uuid
-  personId String @map("person_id") @db.Uuid
-  accessId String @map("access_id")
+  id        String    @id @default(uuid()) @map("person_access_id") @db.Uuid
+  personId  String    @map("person_id") @db.Uuid
+  accessId  String    @map("access_id")
+  isActive  Boolean   @default(true) @map("is_active")
+  isDefault Boolean   @default(false) @map("is_default")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   // relations
   person Person @relation(fields: [personId], references: [personId], onDelete: Cascade)
   access Access @relation(fields: [accessId], references: [id], onDelete: Cascade)
 
+  @@unique([personId, accessId])
   @@index([personId])
   @@index([accessId])
   @@map("person_access")
@@ -219,4 +270,45 @@ model UpcomingEvent {
   @@index([personId])
   @@index([relationId])
   @@map("upcoming_event")
+}
+
+// Organization model
+model Organization {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String
+  code               String   @unique
+  description        String?
+  logoUrl            String?  @map("logo_url")
+  contactEmail       String?  @map("contact_email")
+  contactPhone       String?  @map("contact_phone")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdByPersonId  String   @map("created_by_person_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  createdBy          Person                @relation(fields: [createdByPersonId], references: [personId])
+  members            OrganizationMember[]
+
+  @@index([code])
+  @@index([createdByPersonId])
+  @@map("organizations")
+}
+
+// Organization members (person-organization relationship)
+model OrganizationMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  personId       String   @map("person_id") @db.Uuid
+  role           String   // OWNER, ORGANIZATION_ADMIN, MEMBER
+  status         String   @default("ACTIVE") // ACTIVE, INVITED, REMOVED
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  person         Person       @relation(fields: [personId], references: [personId], onDelete: Cascade)
+
+  @@unique([organizationId, personId])
+  @@index([organizationId])
+  @@index([personId])
+  @@index([status])
+  @@map("organization_members")
 }

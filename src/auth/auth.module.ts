@@ -5,10 +5,12 @@ import { AuthAliasController } from './auth.alias.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtAccessStrategy } from './jwt.strategy';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
     UsersModule,
+    OrganizationsModule,
     JwtModule.register({}), // JWT module configuration moved to AuthService
   ],
   providers: [AuthService, JwtAccessStrategy],
