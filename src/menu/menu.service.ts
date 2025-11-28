@@ -334,7 +334,7 @@ export class MenuService {
     const flatMenus = Array.from(uniqueMenuMap.values());
 
     // 4. Build tree structure from flat list
-    return this.buildMenuTree(flatMenus);
+    return await this.buildMenuTree(flatMenus);
   }
 
   async getEffectiveMenusForUser(userId: string): Promise<MenuTreeItem[]> {
@@ -355,27 +355,66 @@ export class MenuService {
 
   // ========== HELPER: BUILD TREE FROM FLAT LIST ==========
 
-  private buildMenuTree(flatMenus: MenuTreeItem[]): MenuTreeItem[] {
-    // Fetch all menus including parents to handle hierarchy
-    const allMenuIds = new Set(flatMenus.map((m) => m.id));
-    const menuMap = new Map<string, MenuTreeItem>();
+  private async buildMenuTree(
+    flatMenus: MenuTreeItem[],
+  ): Promise<MenuTreeItem[]> {
+    // Get all menu IDs that the user has access to
+    const accessibleMenuIds = new Set(flatMenus.map((m) => m.id));
 
-    flatMenus.forEach((menu) => {
-      menuMap.set(menu.id, { ...menu, children: [] });
+    // Fetch full menu data including parentId to build hierarchy
+    const fullMenus = await this.prisma.menu.findMany({
+      where: {
+        id: { in: Array.from(accessibleMenuIds) },
+        isActive: true,
+      },
+      orderBy: { order: 'asc' },
     });
 
-    // Separate root and child items
+    // Create a map of menu items with empty children arrays
+    const menuMap = new Map<
+      string,
+      MenuTreeItem & { parentId: string | null }
+    >();
+    
+    fullMenus.forEach((menu) => {
+      menuMap.set(menu.id, {
+        id: menu.id,
+        key: menu.key,
+        url: menu.url,
+        icon: menu.icon,
+        title: menu.title,
+        order: menu.order,
+        parentId: menu.parentId,
+        children: [],
+      });
+    });
+
+    // Build tree structure
     const roots: MenuTreeItem[] = [];
 
-    flatMenus.forEach((menu) => {
-      const menuItem = menuMap.get(menu.id)!;
-
-      // For simplicity, we only show menus that user has direct access to
-      // If you want to show parent menus automatically, fetch them from DB
-      roots.push(menuItem);
+    menuMap.forEach((menu) => {
+      if (menu.parentId && menuMap.has(menu.parentId)) {
+        // This is a child menu and parent exists in accessible menus
+        const parent = menuMap.get(menu.parentId)!;
+        parent.children!.push(menu);
+      } else if (!menu.parentId) {
+        // This is a root menu
+        roots.push(menu);
+      }
+      // If parentId exists but parent is not in accessible menus, treat as root
+      else if (menu.parentId && !menuMap.has(menu.parentId)) {
+        roots.push(menu);
+      }
     });
 
-    // Sort by order
+    // Sort children within each parent
+    roots.forEach((root) => {
+      if (root.children && root.children.length > 0) {
+        root.children.sort((a, b) => a.order - b.order);
+      }
+    });
+
+    // Sort roots by order
     return roots.sort((a, b) => a.order - b.order);
   }
 }
